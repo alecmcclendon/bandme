@@ -7,55 +7,77 @@ body{
   height: 100%;
 }
 
-/*profile / header ------------------------------------------- */
-
-#header #profile {
-display: flex;            
-align-items: center; 
-position: relative;
-margin: 0;
-padding-right: 10px;
+#header{
+  background-color: rgba(226, 223, 223, 0.4);
+  backdrop-filter: blur(5px);
+  box-shadow: 0 4px 1rem 0 rgba(0, 0, 0, .2);
+  height: 50px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
 }
 
-#header #profile ul {
-display: flex;
-list-style: none;
-margin: 0;
-padding: 0;
-font-weight: bold;
-font-size: 14px;
+#header .logo img{
+  width: 170px;
+  transform: translateY(8px);
+  margin: 0 25px;
 }
 
-#header #profile ul li {
-padding: 0 7px; 
+#header nav{
+  margin-left: auto;
+  margin-right: 10px;
 }
 
-/* #profile ul {
-display: flex;            
-list-style: none;         
-margin: 0;
-padding: 0;
-} */
+#header nav ul{
+  display: flex;
+  flex-flow: row nowrap;
+  list-style: none;
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  transform: translateY(2px);
+}
 
-/* #profile li a {
-text-decoration: none;
-color: #000000;
-border-left: 4px solid #000;
-padding-top: 7px;
-padding-bottom: 7px;
-padding-left: 10px;
-} */
+#header nav ul a img{
+  width: 30px;
+}
 
-/* #header #profile img {
-width: 30px;  
-border-radius: 50%;
-border-left: 4px solid #000; 
-padding-left: 10px;
-transform: translateY(2px);
-} */
+#header nav ul li{
+  position: relative;
+}
+
+#header nav ul li .tooltip{
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #000;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+#header nav ul li:hover .tooltip{
+  visibility: visible;
+  opacity: 1;
+}
+
+#header #profile{
+  display: flex;
+  align-items: center;
+  position: relative;
+  margin: 0;
+  padding-right: 10px;
+}
 
 #profileIconLink{
-  border-left: 4px solid #000; 
+  border-left: 4px solid #000;
   padding-left: 10px;
 }
 
@@ -66,79 +88,6 @@ transform: translateY(2px);
   object-fit: cover;
   display: block;
 }
-
-/* ------------------------------------------------- */
-
-
-/*profile ------------------------------------------- */
-
-/*header ---------------------------------------------*/
-
-#header{
-background-color: rgba(226, 223, 223, 0.4);
-backdrop-filter: blur(5px);
-box-shadow: 0 4px 1rem 0 rgba(0, 0, 0, .2); 
-height: 50px;
-position: sticky; /*sticky header*/
-top: 0;
-z-index: 100;
-display: flex; 
-/* flex-flow: row nowrap;  */
-align-items: center;
-}
-
-#header nav{
-margin-left: auto;
-margin-right: 10px;
-}
-
-#header nav ul{
-display: flex;
-flex-flow: row nowrap;
-list-style: none;
-gap: 20px;
-transform: translateY(2px);   /*slightly pushed down*/
-}
-
-#header nav ul a img{
-width: 30px;
-}
-
-/* #header nav ul a img:hover{
-transform: scale(1.1);
-} */
-
-#header nav ul li {
-position: relative;
-}
-
-#header nav ul li .tooltip {
-visibility: hidden;
-opacity: 0;
-position: absolute;
-top: calc(100% + 6px);
-left: 50%;
-transform: translateX(-50%);
-background: #000000;
-color: #fff;
-padding: 4px 8px;
-border-radius: 4px;
-font-size: 12px;
-white-space: nowrap;
-}
-
-#header nav ul li:hover .tooltip {
-visibility: visible;
-opacity: 1;
-}
-
-
-#header .logo img {
-width: 170px;
-transform: translateY(8px);
-margin: 0 25px; 
-}
-
 
 
 
