@@ -196,7 +196,7 @@
     {% for item in showcase_items %}
       {% set p = item['media_path'] %}
       {% if p.endswith(".mp4") or p.endswith(".mov") %}
-        <video controls src="{{ p }}" data-id="{{ item['id'] }}" data-type="video"></video>
+        <video controls loop src="{{ p }}" data-id="{{ item['id'] }}" data-type="video"></video>
       {% else %}
         <img src="{{ p }}" alt="" data-id="{{ item['id'] }}" data-type="image"
              style="width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:6px; background:#000;">
