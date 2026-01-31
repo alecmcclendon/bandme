@@ -324,7 +324,7 @@
                     {% if post["media_path"] %}
                     <div class="post-media">
                         {% if post["media_path"].endswith(".mp4") or post["media_path"].endswith(".mov") %}
-                        <video src="{{ post['media_path'] }}" class="post-media-video" controls></video>
+                        <video src="{{ post['media_path'] }}" class="post-media-video" controls loop></video>
                         {% else %}
                         <img src="{{ post['media_path'] }}" alt="post media" class="post-media-img">
                         {% endif %}
