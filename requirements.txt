@@ -1,4 +1,2 @@
-your-repo/
-  app.py
-  requirements.txt
-  ...
+flask
+gunicorn
