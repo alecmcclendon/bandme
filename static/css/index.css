@@ -1,4 +1,4 @@
-/* Reset and body styling */
+
 body {
     background-color: rgb(205, 205, 205);
     font-family: 'Segoe UI', sans-serif;
@@ -36,7 +36,6 @@ body {
     margin: 0 auto;
 }
 
-/* Input fields */
 .login-container input[type="text"],
 .login-container input[type="password"] {
     width: 95%;
@@ -97,6 +96,6 @@ body {
         border-radius: 0;
     }
     body{
-        height: 97vh;
+        height: 100vh;
     }
 }
