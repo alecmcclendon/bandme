@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/home.css') }}">
+</head>
+<body>
+
+<!-- ヘッダー---------------------------------------------------------------- -->
+
+<div id="header">
+
+    <div class="logo">
+        <img src="../static/img/bandme_logo.png" alt="bandme Logo">
+    </div>
+
+    <nav>
+        <ul>
+            <li>
+                <a href="#">
+                    <img src="../static/img/home_icon.png" alt="chat">
+                    <span class="tooltip">ホーム</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" id="chatLauncher">
+                    <img src="../static/img/chat_icon.png" alt="chat">
+                    <span class="tooltip">チャット</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <div id="profile">
+        <a href="{{ url_for('profile') }}" id="profileIconLink">
+          <img id="profileIcon" src="{{ header_avatar }}" alt="Profile">
+        </a>
+    </div>
+
+</div>
+
+<!-- ヘッダー---------------------------------------------------------------- -->
+
+<div class="search-wrapper">
+    <input type="search" id="mainSearch" placeholder="検索..." />
+    <!-- user search dropdown -->
+    <div id="searchDropdown" class="search-dropdown" hidden></div>
+</div>
+
+<div id="main_container">
+
+    <img id="filterIcon" class="filter-toggle"
+         src="{{ url_for('static', filename='img/filter_icon.png') }}">
+
+    <div id="filter_container">
+
+        <div id="icon_selection">
+            <ul>
+                <li><a href="#" data-title="個人のみ" data-role="individual"  class="{% if filter_role == 'individual' %}selected{% endif %}"><img src="../static/img/findmember.png" alt="Find Member"></a></li>
+                <li><a href="#" data-title="バンドのみ" data-role="band" class="{% if filter_role == 'band' %}selected{% endif %}"><img src="../static/img/findband.png" alt="Find Band"></a></li>
+            </ul>
+        </div>
+
+        <div id="filter_header">
+            <h2>
+                {% if filter_role == 'individual' %}
+                    個人のみ
+                {% elif filter_role == 'band' %}
+                    バンドのみ
+                {% else %}
+                    全員から
+                {% endif %}
+            </h2>
+        </div>
+
+        <div id="filter1">
+            <label for="genre_filter">ジャンル：</label>
+            <select id="genre_filter" name="genre_filter">
+                <option value=""         {% if not filter_genre %}selected{% endif %}>指定なし</option>
+                <option value="classic"  {% if filter_genre == 'classic' %}selected{% endif %}>クラシック</option>
+                <option value="jazz"     {% if filter_genre == 'jazz' %}selected{% endif %}>ジャズ</option>
+                <option value="blues"    {% if filter_genre == 'blues' %}selected{% endif %}>ブルーズ</option>
+                <option value="pop"      {% if filter_genre == 'pop' %}selected{% endif %}>ポップ</option>
+                <option value="metal"    {% if filter_genre == 'metal' %}selected{% endif %}>メタル</option>
+                <option value="rock"     {% if filter_genre == 'rock' %}selected{% endif %}>ロック</option>
+                <option value="other"    {% if filter_genre == 'other' %}selected{% endif %}>そのほか</option>
+            </select>
+        </div>
+
+        <div id="filter2">
+            <label for="instrument_filter">相手の楽器：</label>
+            <select id="instrument_filter" name="instrument_filter">
+                <option value=""                {% if not filter_instrument %}selected{% endif %}>指定なし</option>
+                <option value="acoustic"        {% if filter_instrument == 'acoustic' %}selected{% endif %}>アコースティック</option>
+                <option value="bass"            {% if filter_instrument == 'bass' %}selected{% endif %}>ベース</option>
+                <option value="drum"            {% if filter_instrument == 'drum' %}selected{% endif %}>ドラム</option>
+                <option value="electric_guitar" {% if filter_instrument == 'electric_guitar' %}selected{% endif %}>エレキギター</option>
+                <option value="keyboard"        {% if filter_instrument == 'keyboard' %}selected{% endif %}>キーボード</option>
+                <option value="piano"           {% if filter_instrument == 'piano' %}selected{% endif %}>ピアノ</option>
+                <option value="vocal"           {% if filter_instrument == 'vocal' %}selected{% endif %}>ボーカル</option>
+                <option value="other"           {% if filter_instrument == 'other' %}selected{% endif %}>そのほか</option>
+            </select>
+            <span class="help_filter" tabindex="0" data-tip="＊ 探したい相手の楽器">?</span>
+        </div>
+
+        <div id="filter3">
+            <label for="my_instrument_filter">自分の楽器：</label>
+            <select id="my_instrument_filter" name="my_instrument_filter">
+                <option value=""                {% if not filter_my_instrument %}selected{% endif %}>指定なし</option>
+                <option value="acoustic"        {% if filter_my_instrument == 'acoustic' %}selected{% endif %}>アコースティック</option>
+                <option value="bass"            {% if filter_my_instrument == 'bass' %}selected{% endif %}>ベース</option>
+                <option value="drum"            {% if filter_my_instrument == 'drum' %}selected{% endif %}>ドラム</option>
+                <option value="electric_guitar" {% if filter_my_instrument == 'electric_guitar' %}selected{% endif %}>エレキギター</option>
+                <option value="keyboard"        {% if filter_my_instrument == 'keyboard' %}selected{% endif %}>キーボード</option>
+                <option value="piano"           {% if filter_my_instrument == 'piano' %}selected{% endif %}>ピアノ</option>
+                <option value="vocal"           {% if filter_my_instrument == 'vocal' %}selected{% endif %}>ボーカル</option>
+                <option value="other"           {% if filter_my_instrument == 'other' %}selected{% endif %}>そのほか</option>
+            </select>
+            <span class="help_filter" tabindex="0" data-tip="＊ あなたが演奏する楽器">?</span>
+        </div>
+
+        <div id="tag_search">
+            <div id="tags"></div>
+            <form id="tag-form" autocomplete="off">
+                <input id="tag-input" type="search" placeholder="タグを入力" />
+                <button type="submit">追加</button>
+            </form>
+        </div>
+
+        <div id="filter_actions">
+            <button id="search-btn" type="button">適用</button>
+            <button id="clear-btn" type="button">取り消す</button>
+        </div>
+
+    </div>
+
+    <!-- feed ーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーー -->
+
+    <div id="feed_container">
+
+        <div id="feed-toolbar" class="feed-toolbar">
+            <div class="only-mine">
+                <label class="switch">
+                    <input type="checkbox" id="onlyMine" aria-label="自分の投稿だけ表示">
+                    <span class="switch-track"><span class="switch-knob"></span></span>
+                </label>
+                <span class="switch-text">自分の投稿を表示</span>
+            </div>
+
+            <div id="create-post">
+                <a href="#"><img src="../static/img/newpost_icon.png" alt="新規投稿"></a>
+            </div>
+        </div>
+
+        
+        <div id="overlay" class="overlay" hidden></div>
+        <div id="modal" class="modal" hidden>
+
+            <div id="post_or_close">
+                <h2 class="modal-title">投稿</h2>
+                <button id="modal-close" type="button" aria-label="閉じる">×</button>
+            </div>
+
+
+            <!-- 中身--------------------------------- -->
+            <form id="create-post-form"
+                  action="{{ url_for('create_post') }}"
+                  method="post"
+                  enctype="multipart/form-data">
+
+                <input type="hidden" id="edit_post_id" name="post_id" value="">
+                <input type="hidden" id="remove_media" name="remove_media" value="0">
+
+
+                <div id="create-post-container">
+
+                    <div class="compose compose-stacked">
+                        <label for="media" class="upload-btn">画像・動画を選択</label>
+                        <input type="file" id="media" name="media" accept="image/*,video/*" hidden>
+
+                        <div id="preview" class="preview"></div>
+                      
+                        <textarea id="caption" name="caption" placeholder="テキストを入力..." rows="6"></textarea>
+                      
+                        <div id="tag_add_post">
+                          <div id="tags-post"></div>
+                      
+                          <div id="tag-form-post" autocomplete="off">
+                            <input id="tag-input-post" type="text" placeholder="タグを入力" />
+                            <button type="button" id="tag-add-post-btn">追加</button>
+                          </div>
+                      
+                          <input type="hidden" id="tags-hidden" name="tags">
+                        </div>
+                      
+                      </div>
+
+                    <div id="filter1_post">
+                        <label for="genre_filter_post">ジャンル：</label>
+                        <select id="genre_filter_post" name="genre_filter">
+                            <option value="">指定なし</option>
+                            <option value="classic">クラシック</option>
+                            <option value="jazz">ジャズ</option>
+                            <option value="blues">ブルーズ</option>
+                            <option value="pop">ポップ</option>
+                            <option value="metal">メタル</option>
+                            <option value="rock">ロック</option>
+                            <option value="other">そのほか</option>
+                        </select>
+                    </div>
+
+                    <div id="filter2_post">
+                        <label for="instrument_filter_post">自分の楽器：</label>
+                        <select id="instrument_filter_post" name="instrument_filter">
+                            <option value="">指定なし</option>
+                            <option value="acoustic">アコースティック</option>
+                            <option value="bass">ベース</option>
+                            <option value="drum">ドラム</option>
+                            <option value="electric_guitar">エレキギター</option>
+                            <option value="keyboard">キーボード</option>
+                            <option value="piano">ピアノ</option>
+                            <option value="vocal">ボーカル</option>
+                            <option value="other">そのほか</option>
+                        </select>
+                        <p>＊ あなたが演奏する楽器</p>
+                        <span class="help" tabindex="0" data-tip="＊ あなたが演奏する楽器">?</span>
+                    </div>
+
+                    <div id="filter3_post">
+                        <label for="my_instrument_filter_post">相手の楽器：</label>
+                        <select id="my_instrument_filter_post" name="my_instrument_filter">
+                            <option value="">指定なし</option>
+                            <option value="acoustic">アコースティック</option>
+                            <option value="bass">ベース</option>
+                            <option value="drum">ドラム</option>
+                            <option value="electric_guitar">エレキギター</option>
+                            <option value="keyboard">キーボード</option>
+                            <option value="piano">ピアノ</option>
+                            <option value="vocal">ボーカル</option>
+                            <option value="other">そのほか</option>
+                        </select>
+                        <p>＊ 探したい相手の楽器</p>
+                        <span class="help" tabindex="0" data-tip="＊ 探したい相手の楽器">?</span>
+                    </div>
+
+                </div> <!-- /#create-post-container -->
+            </form>
+
+            <form id="delete-post-form" method="post" hidden></form>
+
+            <div id="modal-footer">
+              <button
+                id="delete-post-btn"
+                type="button"
+                class="delete-post-btn"
+                aria-label="削除"
+                hidden
+              >
+                <img src="../static/img/trash_icon.png" alt="">
+              </button>
+            
+              <button type="submit" form="create-post-form" class="post-submit-btn">投稿</button>
+            </div>
+        </div> <!-- /#modal -->
+
+        <!-- feed posts --------------------------------- -->
+
+        {% for post in posts %}
+                <div class="post"
+                data-is-mine="{{ 'true' if post['username'] == username else 'false' }}"
+                data-post-id="{{ post['id'] }}"
+                data-caption='{{ (post["caption"] or "")|tojson }}'
+                data-genre='{{ (post["genre"] or "")|tojson }}'
+                data-my-instrument='{{ (post["my_instrument"] or "")|tojson }}'
+                data-target-instrument='{{ (post["target_instrument"] or "")|tojson }}'
+                data-tags='{{ (post["tags"] or "")|tojson }}'
+                data-media-path='{{ (post["media_path"] or "")|tojson }}'
+                >
+                <div class="post-header">
+
+                    {% if post["username"] == username %}
+                      <span class="post-user-link" aria-label="Your profile icon">
+                        <img
+                          src="{{ post['avatar_path'] or ('/static/img/profile_icon_band.png' if post['role']=='band' else '/static/img/profile_icon.png') }}"
+                          alt="Profile Icon"
+                          class="post-icon">
+                      </span>
+                    {% else %}
+                      <a class="post-user-link" href="{{ url_for('user_profile', user_id=post['user_id']) }}">
+                        <img
+                          src="{{ post['avatar_path'] or ('/static/img/profile_icon_band.png' if post['role']=='band' else '/static/img/profile_icon.png') }}"
+                          alt="Profile Icon"
+                          class="post-icon">
+                      </a>
+                    {% endif %}
+                  
+                    <div class="post-main">
+                      <div class="post-user-row">
+
+                        {% if post["username"] == username %}
+                          <span class="post-user-link post-username-link" aria-label="Your username">
+                            <span class="post-username">{{ post["username"] }}</span>
+                          </span>
+                        {% else %}
+                          <a class="post-user-link post-username-link post-username-link"
+                             href="{{ url_for('user_profile', user_id=post['user_id']) }}">
+                            <span class="post-username">{{ post["username"] }}</span>
+                          </a>
+                        {% endif %}
+                  
+                        {% if post["role"] == "individual" %}
+                          <span class="post-type">個人</span>
+                        {% else %}
+                          <span class="post-type">バンド</span>
+                        {% endif %}
+                  
+                        <span class="post-time" data-utc="{{ post['created_at'] }}">
+                          {{ post["created_at"] }}
+                        </span>
+                      </div>
+
+                    {% if post["media_path"] %}
+                    <div class="post-media">
+                        {% if post["media_path"].endswith(".mp4") or post["media_path"].endswith(".mov") %}
+                        <video src="{{ post['media_path'] }}" class="post-media-video" controls></video>
+                        {% else %}
+                        <img src="{{ post['media_path'] }}" alt="post media" class="post-media-img">
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <div class="post-body">
+                        {{ post["caption"] }}
+                    </div>
+
+                    <div class="post-tags">
+                        {% if post["tags"] %}
+                        {% for tag in post["tags"].split(",") %}
+                        <span class="tag">#{{ tag.strip() }}</span>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+
+                    <div class="post-actions">
+                        {% if post["username"] == username %}
+                        <button class="settings-btn" aria-label="設定">⚙</button>
+                        {% else %}
+                            <button
+                                class="message-btn"
+                                aria-label="メッセージ"
+                                data-user-id="{{ post['user_id'] }}"
+                                data-username="{{ post['username'] }}"
+                            >
+                                メッセージ
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+    </div> <!-- /#feed_container -->
+
+</div> <!-- /#main_container -->
+
+<!-- Chat popup ------------------------------------------------->
+
+<div id="chatModal" class="chat-modal" hidden>
+    <div class="chat-panel">
+
+        <div id="chatListView">
+            <div class="chat-head chat-list-head">
+                <h2 class="chat-title">メッセージ</h2>
+                <button class="chat-close" id="chatCloseBtnList" aria-label="閉じる">×</button>
+            </div>
+
+            <ul id="chatConversations" class="chat-list" role="list"></ul>
+        </div>
+
+        <div id="chatThreadView" hidden>
+            <div class="chat-head chat-thread-head">
+                <button class="chat-back" id="chatBackBtn" aria-label="戻る"><svg height="12" width="12" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="m4.431 12.822l13 9A1 1 0 0 0 19 21V3a1 1 0 0 0-1.569-.823l-13 9a1.003 1.003 0 0 0 0 1.645z" fill="currentColor"/>
+                </svg></button>
+                <h2 id="chatThreadTitle" class="chat-title">Chat</h2>
+                <button class="chat-close" id="chatCloseBtnThread" aria-label="閉じる">×</button>
+            </div>
+
+            <ol id="chatMessages" class="chat-messages" role="list"></ol>
+
+            <form id="chatSendForm" class="chat-sendbar" autocomplete="off">
+                <input id="chatInput" name="message" type="text" placeholder="テキストを入力" aria-label="Message" />
+                <button class="chat-send" aria-label="Send">▶</button>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- Chat popup ------------------------------------------------->
+ 
+<script>window.INIT_SEARCH_TAGS = "{{ filter_tags_str or '' }}";</script>
+
+<script> window.CURRENT_USER_ID = "{{ session['user_id'] }}";</script>
+
+<script src="{{ url_for('static', filename='js/home.js') }}"></script>
+</body>
+</html>

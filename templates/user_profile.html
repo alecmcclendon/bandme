@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ user['username'] }}</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/user_profile.css', v=2) }}">
+</head>
+<body>
+
+<!-- ヘッダー---------------------------------------------------------------- -->
+<div id="header">
+
+  <div class="logo">
+      <img src="../static/img/bandme_logo.png" alt="bandme Logo">
+  </div>
+
+  <nav>
+      <ul>
+          <li>
+            <a href="{{ url_for('home') }}">
+              <img src="../static/img/home_icon.png" alt="chat">
+              <span class="tooltip">ホーム</span>
+            </a>
+          </li>
+          <li>
+              <a href="#" id="chatLauncher">
+                <img src="../static/img/chat_icon.png" alt="chat">
+                <span class="tooltip">チャット</span>
+              </a>
+            </li>
+      </ul>
+  </nav>
+
+  <div id="profile">
+      <a href="{{ url_for('profile') }}" id="profileIconLink">
+        <img id="profileIcon" src="{{ header_avatar }}" alt="Profile">
+      </a>
+  </div>
+
+</div>
+<!-- ヘッダー---------------------------------------------------------------- -->
+
+
+<div class="profile-layout">
+  <div class="profile-header">
+    <img class="profile-icon" src="{{ avatar }}" alt="">
+
+    <div class="profile-main">
+      <div class="profile-user-row">
+
+        <div class="profile-top">
+          <div class="profile-name">
+            <span class="profile-username">{{ user['username'] }}</span>
+            {% if user['role'] == "individual" %}
+              <span class="profile-type">個人</span>
+            {% else %}
+              <span class="profile-type">バンド</span>
+            {% endif %}
+          </div>
+
+          <div class="profile-actions">
+            <button
+              id="followBtn"
+              type="button"
+              class="btn btn-outline"
+              data-user-id="{{ user['id'] }}"
+              aria-pressed="{{ 'true' if is_following else 'false' }}"
+            >
+              {{ "フォロー中" if is_following else "フォローする" }}
+            </button>
+          
+            <button
+              id="messageBtn"
+              type="button"
+              class="btn btn-solid"
+              data-user-id="{{ user['id'] }}"
+              aria-label="メッセージ"
+            >
+              メッセージ
+            </button>
+          </div>
+
+        </div>
+
+        <!-- counts shown but not clickable -->
+        <div class="profile-bottom">
+          <div class="count-btn" style="cursor: default;">
+            <span class="follower-count">{{ follower_count or 0 }}</span>
+            <span class="profile-follower">フォロワー</span>
+          </div>
+
+          <div class="count-btn" style="cursor: default;">
+            <span class="following-count">{{ following_count or 0 }}</span>
+            <span class="profile-follow">フォロー</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="profile-bio">{{ user['bio'] }}</div>
+    </div>
+
+  </div>
+</div>
+
+
+<div class="profile-layout-showcase">
+  <div class="showcase-header">
+    <h1>ショーケース</h1>
+  </div>
+
+  <section class="showcase-grid" id="showcaseGrid">
+    {% for item in showcase_items %}
+      {% set p = item['media_path'] %}
+      {% if p.endswith(".mp4") or p.endswith(".mov") %}
+        <video controls src="{{ p }}"></video>
+      {% else %}
+        <img src="{{ p }}" alt=""
+             style="width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:6px; background:#000;">
+      {% endif %}
+    {% endfor %}
+  </section>
+</div>
+
+
+<!-- Chat popup ------------------------------------------------->
+<div id="chatModal" class="chat-modal" hidden>
+  <div class="chat-panel">
+
+    <div id="chatListView">
+      <div class="chat-head chat-list-head">
+        <h2 class="chat-title">メッセージ</h2>
+        <button class="chat-close" id="chatCloseBtnList" aria-label="閉じる">×</button>
+      </div>
+      <ul id="chatConversations" class="chat-list" role="list"></ul>
+    </div>
+
+    <div id="chatThreadView" hidden>
+      <div class="chat-head chat-thread-head">
+        <button class="chat-back" id="chatBackBtn" aria-label="戻る"><svg height="12" width="12" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="m4.431 12.822l13 9A1 1 0 0 0 19 21V3a1 1 0 0 0-1.569-.823l-13 9a1.003 1.003 0 0 0 0 1.645z" fill="currentColor"/>
+      </svg></button>
+        <h2 id="chatThreadTitle" class="chat-title">Chat</h2>
+        <button class="chat-close" id="chatCloseBtnThread" aria-label="閉じる">×</button>
+      </div>
+
+      <ol id="chatMessages" class="chat-messages" role="list"></ol>
+
+      <form id="chatSendForm" class="chat-sendbar" autocomplete="off">
+        <input id="chatInput" name="message" type="text" placeholder="テキストを入力" aria-label="Message" />
+        <button class="chat-send" aria-label="Send">▶</button>
+      </form>
+    </div>
+  </div>
+</div>
+<!-- Chat popup ------------------------------------------------->
+
+<script>
+  window.DEFAULT_AVATAR = "{{ url_for('static', filename='img/profile_icon.png') }}";
+</script>
+<script src="{{ url_for('static', filename='js/user_profile.js', v=1) }}"></script>
+</body>
+</html>

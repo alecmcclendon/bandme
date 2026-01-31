@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Register</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/register.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>register</title>
+
+</head>
+<body>
+
+    <div class="login-container">
+        <h1>アカウントの新規登録</h1>
+        {% if message %}
+            <p id="error-msg">{{ message }}</p>
+        {% endif %}
+        <form method="POST">
+            <input type="text" name="username" placeholder="ユーザー名" required><br>
+            <input type="password" name="password" placeholder="パスワード" required><br>
+
+            <div class="role-select">
+                <label>
+                    <input type="radio" name="role" value="individual" required>
+                    個人
+                  </label>
+                <label>
+                  <input type="radio" name="role" value="band" required>
+                  バンド
+                </label>
+              </div>
+
+            <input type="submit" value="アカウント作成">
+        </form>
+        <p><a href="{{ url_for('login') }}">ログイン画面に戻る</a></p>
+    </div>
+
+</body>
+</html>
