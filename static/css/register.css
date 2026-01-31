@@ -1,0 +1,136 @@
+/* Reset and body styling */
+body {
+    background-color: rgb(205, 205, 205);
+    font-family: 'Segoe UI', sans-serif;
+    margin: 0;
+    padding: 0;
+    height: 90vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+
+.login-container {
+    background-color: rgb(255, 255, 255);
+    color: rgb(0, 0, 0);
+    width: 90%;
+    width: 400px;
+    padding: 20px 30px;
+    border-radius: 12px;
+    box-shadow: 0 0 30px rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-content: center;
+    justify-content: center;
+}
+
+.login-container h1 {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+
+/* Input fields */
+.login-container input[type="text"],
+.login-container input[type="password"] {
+    width: 95%;
+    height: 40px;
+    margin-bottom: 25px;
+    border: none;
+    border-radius: 6px;
+    padding: 0 10px;
+    font-size: 16px;
+    background-color: #ffffff ;
+    color: rgb(82, 82, 82);
+    border-style: solid;
+    border-color:#747474;
+}
+
+.login-container input[type="submit"] {
+    width: 100%;
+    height: 40px;
+    border: none;
+    border-radius: 6px;
+    background-color: #000000;
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background-color 0.3s ease;
+    font-size: 20px;
+}
+
+.login-container input[type="submit"]:hover {
+    background-color:  #575757;
+}
+
+/* Error message */
+.login-container p {
+    margin: 0;
+    font-size: 14px;
+    text-align: center;
+}
+
+.login-container a {
+    color: #4cafef;
+    text-decoration: none;
+    font-weight:bold;
+}
+
+.login-container a:hover {
+    text-decoration:
+}
+
+/* radio button---------------------------------------------------- */
+.role-select label{
+    font-size: 15px;
+    font-weight: bold;
+    display: inline-flex;
+    align-items: center;
+    margin-right: 25px;
+}
+
+input[type="radio"] {
+    appearance: none;         /* remove default browser style */
+    -webkit-appearance: none; /* for Safari */
+    -moz-appearance: none;    /* for Firefox */
+
+    width: 15px;
+    height: 15px;
+    border: 2px solid rgb(82, 82, 82);
+    border-radius: 50%;
+    outline: none;
+    cursor: pointer;
+    position: relative;
+    margin-right: 5px;
+  }
+  
+  /* the filled circle when checked */
+  input[type="radio"]:checked::before {
+    content: "";
+    display: block;
+    width: 7px;   /* inner dot size */
+    height: 7px;
+    background-color: #000000; /* inner dot color */
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;   /* centers the dot */
+    left: 2px;
+  }
+  /* radio button---------------------------------------------------- */
+
+
+
+  @media (max-width: 550px) {
+    .login-container{
+        height: 100%;
+        width: 100%;
+        border-radius: 0;
+    }
+    body{
+        height: 97vh;
+    }
+}
