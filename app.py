@@ -9,11 +9,62 @@ import mimetypes
 mimetypes.add_type("video/mp4", ".mp4")
 mimetypes.add_type("video/quicktime", ".mov")
 
+# ✅ NEW: R2 (S3-compatible) upload client
+import boto3
+from botocore.config import Config
+
+
 app = Flask(__name__)
 app.secret_key = "change-me-in-prod"
 DB_NAME = "users.db"
 
-# ---- Upload settings ----
+
+# ===================== R2 CONFIG (NEW) =====================
+# You must set these env vars in Render
+R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "").strip()
+R2_BUCKET = os.environ.get("R2_BUCKET", "").strip()
+R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "").strip()
+R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "").strip()
+R2_PUBLIC_BASE_URL = os.environ.get("R2_PUBLIC_BASE_URL", "").strip().rstrip("/")
+
+R2_ENABLED = all([R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_BASE_URL])
+
+if R2_ENABLED:
+    R2_ENDPOINT = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=R2_ENDPOINT,
+        aws_access_key_id=R2_ACCESS_KEY_ID,
+        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+        config=Config(signature_version="s3v4"),
+        region_name="auto",
+    )
+else:
+    s3 = None
+
+
+def upload_to_r2(file_storage, key: str) -> str:
+    """
+    Upload a Flask FileStorage object to R2 and return a PUBLIC URL.
+    Requires bucket public read + R2_PUBLIC_BASE_URL set.
+    """
+    if not R2_ENABLED:
+        raise RuntimeError("R2 is not configured. Set R2_* env vars including R2_PUBLIC_BASE_URL.")
+
+    content_type = file_storage.mimetype
+    extra = {}
+    if content_type:
+        extra["ContentType"] = content_type
+
+    # Upload streaming (no big RAM usage)
+    s3.upload_fileobj(file_storage.stream, R2_BUCKET, key, ExtraArgs=extra)
+
+    # Return public URL that templates can use directly
+    return f"{R2_PUBLIC_BASE_URL}/{key}"
+# ===========================================================
+
+
+# ---- Upload settings (kept for local fallback) ----
 UPLOAD_FOLDER = os.path.join("static", "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -438,9 +489,14 @@ def update_profile():
             return "Invalid avatar file type", 400
 
         unique = _unique_upload_name("avatar", me, file.filename)
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
-        file.save(save_path)
-        avatar_path = "/" + save_path.replace(os.sep, "/")
+
+        if R2_ENABLED:
+            key = f"avatars/{unique}"
+            avatar_path = upload_to_r2(file, key)
+        else:
+            save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
+            file.save(save_path)
+            avatar_path = "/" + save_path.replace(os.sep, "/")
 
     c.execute("""
         UPDATE users
@@ -487,9 +543,14 @@ def update_showcase():
             continue
 
         unique = _unique_upload_name("showcase", me, f.filename)
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
-        f.save(save_path)
-        media_path = "/" + save_path.replace(os.sep, "/")
+
+        if R2_ENABLED:
+            key = f"showcase/{unique}"
+            media_path = upload_to_r2(f, key)
+        else:
+            save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
+            f.save(save_path)
+            media_path = "/" + save_path.replace(os.sep, "/")
 
         c.execute(
             "INSERT INTO showcase_items (user_id, media_path) VALUES (?, ?)",
@@ -549,7 +610,7 @@ def create_post():
         remove_media = (request.form.get("remove_media") or "0") == "1"
         if remove_media:
             # Optional: delete the actual file from disk (only if it's in /static/uploads/)
-            # ✅ NOTE: if you think deletes are causing missing videos, you can comment this block out.
+            # NOTE: for R2 URLs we do not delete here (demo-friendly)
             if media_path and media_path.startswith("/static/uploads/"):
                 try:
                     os.remove(media_path.lstrip("/"))
@@ -560,10 +621,15 @@ def create_post():
         # If user uploads a new file, it overrides removal
         file = request.files.get("media")
         if file and file.filename and allowed_file(file.filename):
-            unique = _unique_upload_name("post", me, file.filename)  # ✅ avoids overwriting
-            save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
-            file.save(save_path)
-            media_path = "/" + save_path.replace(os.sep, "/")
+            unique = _unique_upload_name("post", me, file.filename)
+
+            if R2_ENABLED:
+                key = f"posts/{unique}"
+                media_path = upload_to_r2(file, key)
+            else:
+                save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
+                file.save(save_path)
+                media_path = "/" + save_path.replace(os.sep, "/")
 
         c.execute("""
             UPDATE posts
@@ -579,11 +645,15 @@ def create_post():
     media_path = None
     file = request.files.get("media")
     if file and file.filename and allowed_file(file.filename):
-        # ✅ UPDATED: create mode now also uses unique filenames (no overwrites)
         unique = _unique_upload_name("post", me, file.filename)
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
-        file.save(save_path)
-        media_path = "/" + save_path.replace(os.sep, "/")
+
+        if R2_ENABLED:
+            key = f"posts/{unique}"
+            media_path = upload_to_r2(file, key)
+        else:
+            save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
+            file.save(save_path)
+            media_path = "/" + save_path.replace(os.sep, "/")
 
     c.execute("""
         INSERT INTO posts (user_id, caption, genre, my_instrument, target_instrument, tags, media_path)
@@ -1348,6 +1418,10 @@ def api_account_delete():
 
 
 # ---- Run app ----
+if __name__ == "__main__":
+    init_db()
+    app.run(port=5001, debug=True)
+
 if __name__ == "__main__":
     init_db()
     app.run(port=5001, debug=True)
