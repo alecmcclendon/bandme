@@ -1059,129 +1059,148 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-// =============== USER SEARCH DROPDOWN (CLICK ONLY, ENTER DOES NOTHING) =====================
+
+
+
+
+
+
+// =============== FEED VIDEO: STABLE AUTOPLAY ON SCROLL =====================
 document.addEventListener("DOMContentLoaded", () => {
-  const input = document.getElementById("mainSearch");
-  const dropdown = document.getElementById("searchDropdown");
-  if (!input || !dropdown) return;
+  const videos = Array.from(document.querySelectorAll(".post-media-video"));
+  if (!videos.length) return;
 
-  let debounceTimer = null;
-  let aborter = null;
+  // Audio unlock after first user interaction
+  let audioUnlocked = false;
 
-  const hide = () => {
-    dropdown.hidden = true;
-    dropdown.innerHTML = "";
-  };
+  // Track visibility for ALL videos
+  const ratioByVideo = new Map(); // video -> intersectionRatio
+  let current = null;
+  let rafId = null;
+  let playSeq = 0; // prevents race conditions
 
-  const show = () => {
-    dropdown.hidden = false;
-  };
+  // Ensure autoplay-friendly defaults
+  videos.forEach((v) => {
+    v.loop = true;
+    v.muted = true;
+    v.setAttribute("muted", "");
+    v.setAttribute("playsinline", "");
+    v.preload = "metadata";
 
-  const escapeHtml = (s) =>
-    String(s)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+    // init ratio
+    ratioByVideo.set(v, 0);
+  });
 
-  const render = (users) => {
-    if (!users || users.length === 0) {
-      dropdown.innerHTML = `<div style="padding:10px 12px;color:#666;">No users found</div>`;
-      show();
-      return;
-    }
-
-    dropdown.innerHTML = users
-      .map((u) => {
-        const url = `/user/${u.id}`; // only used on click
-        const avatar = u.avatar || "/static/img/profile_icon.png";
-        return `
-          <button type="button" class="search-item" data-url="${escapeHtml(url)}">
-            <img class="search-item-avatar" src="${escapeHtml(avatar)}" alt="">
-            <span class="search-item-name">${escapeHtml(u.username || "")}</span>
-          </button>
-        `;
-      })
-      .join("");
-
-    show();
-  };
-
-  const fetchUsers = async (q) => {
-    if (aborter) aborter.abort();
-    aborter = new AbortController();
-
-    const res = await fetch(`/api/user_search?q=${encodeURIComponent(q)}`, {
-      credentials: "same-origin",
-      signal: aborter.signal,
+  function pauseAllExcept(except) {
+    videos.forEach((v) => {
+      if (v !== except && !v.paused) v.pause();
     });
+  }
 
-    if (!res.ok) throw new Error("User search failed");
-    return res.json();
-  };
+  function setMutedState(v) {
+    if (audioUnlocked) {
+      v.muted = false;
+      v.removeAttribute("muted");
+      v.volume = 1;
+    } else {
+      v.muted = true;
+      v.setAttribute("muted", "");
+    }
+  }
 
-  // typing updates dropdown only
-  input.addEventListener("input", () => {
-    const q = input.value.trim();
-    if (debounceTimer) clearTimeout(debounceTimer);
+  function pickBestVideo() {
+    let best = null;
+    let bestRatio = 0;
 
-    if (!q) {
-      hide();
+    for (const [v, r] of ratioByVideo.entries()) {
+      if (r > bestRatio) {
+        bestRatio = r;
+        best = v;
+      }
+    }
+
+    // If nothing is meaningfully visible, pause current
+    if (!best || bestRatio < 0.35) {
+      if (current && !current.paused) current.pause();
+      current = null;
       return;
     }
 
-    debounceTimer = setTimeout(async () => {
-      try {
-        const users = await fetchUsers(q);
-        render(users);
-      } catch (err) {
-        if (err?.name === "AbortError") return;
-        console.error(err);
-        hide();
-      }
-    }, 180);
-  });
+    // Hysteresis: don't switch unless the new one is clearly more visible
+    if (current && current !== best) {
+      const curRatio = ratioByVideo.get(current) || 0;
+      // Require either: best is quite visible OR it's 15% more visible than current
+      const shouldSwitch = bestRatio > 0.65 || bestRatio > curRatio + 0.15;
+      if (!shouldSwitch) return;
+    }
 
-  // click only navigates
-  dropdown.addEventListener("click", (e) => {
-    const item = e.target.closest(".search-item");
-    if (!item) return;
-    const url = item.dataset.url;
-    if (url) window.location.href = url;
-  });
+    if (current !== best) {
+      current = best;
+    }
 
-  // HARD BLOCK: Enter should do NOTHING (keep popup), and must NOT trigger filters/feed.
-  // Capture phase + stopImmediatePropagation prevents your other mainSearch keydown listeners.
-  input.addEventListener(
-    "keydown",
-    (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        // do nothing else — keep dropdown open
-        return;
-      }
+    // Only one plays
+    pauseAllExcept(current);
+    setMutedState(current);
 
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        hide();
-      }
+    // Race-proof play
+    const mySeq = ++playSeq;
+    const p = current.play();
+    if (p?.catch) {
+      p.catch(() => {});
+    }
+
+    // If another play request happened, ignore
+    if (mySeq !== playSeq) return;
+  }
+
+  function schedulePick() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      pickBestVideo();
+    });
+  }
+
+  // Observer updates ratios, then schedules a single pick per frame
+  const io = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        ratioByVideo.set(e.target, e.isIntersecting ? e.intersectionRatio : 0);
+      });
+      schedulePick();
     },
-    true
+    {
+      // A slight rootMargin makes it decide a bit earlier/later; tune to taste
+      root: null,
+      rootMargin: "0px 0px -10% 0px",
+      threshold: Array.from({ length: 21 }, (_, i) => i / 20), // 0.00..1.00
+    }
   );
 
-  // keep popup open when clicking inside; close when clicking outside
-  document.addEventListener("click", (e) => {
-    const inside = dropdown.contains(e.target) || input.contains(e.target);
-    if (!inside) hide();
-  });
+  videos.forEach((v) => io.observe(v));
 
-  // when the X (search cancel) is pressed in <input type="search">
-  input.addEventListener("search", () => {
-    if (!input.value.trim()) hide();
-  });
+  // Extra stability: also schedulePick on scroll/resize (in case IO lags)
+  window.addEventListener("scroll", schedulePick, { passive: true });
+  window.addEventListener("resize", schedulePick);
+
+  // Unlock audio on first user gesture
+  const unlock = () => {
+    audioUnlocked = true;
+
+    // If something is currently playing, unmute it within the gesture
+    if (current) {
+      setMutedState(current);
+      const p = current.play();
+      if (p?.catch) p.catch(() => {});
+    }
+
+    window.removeEventListener("pointerdown", unlock, true);
+    window.removeEventListener("keydown", unlock, true);
+  };
+
+  window.addEventListener("pointerdown", unlock, true);
+  window.addEventListener("keydown", unlock, true);
+
+  // Initial pick on load
+  schedulePick();
 });
