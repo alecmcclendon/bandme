@@ -1070,24 +1070,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const videos = Array.from(document.querySelectorAll(".post-media-video"));
   if (!videos.length) return;
 
-  // Audio unlock after first user interaction
   let audioUnlocked = false;
 
-  // Track visibility for ALL videos
-  const ratioByVideo = new Map(); // video -> intersectionRatio
+  const ratioByVideo = new Map();
   let current = null;
   let rafId = null;
-  let playSeq = 0; // prevents race conditions
+  let playSeq = 0;
 
-  // Ensure autoplay-friendly defaults
+  // NEW: when a video is fullscreen (or PiP), lock autoplay to it
+  let lockedVideo = null;
+
   videos.forEach((v) => {
     v.loop = true;
     v.muted = true;
     v.setAttribute("muted", "");
     v.setAttribute("playsinline", "");
     v.preload = "metadata";
-
-    // init ratio
     ratioByVideo.set(v, 0);
   });
 
@@ -1108,7 +1106,34 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // NEW: helper to lock autoplay to a specific video
+  function lockToVideo(v) {
+    if (!v) return;
+    lockedVideo = v;
+    current = v;
+    pauseAllExcept(v);
+    setMutedState(v);
+    const p = v.play();
+    if (p?.catch) p.catch(() => {});
+  }
+
+  // NEW: unlock and re-run normal picking
+  function unlockVideo() {
+    lockedVideo = null;
+    schedulePick();
+  }
+
   function pickBestVideo() {
+    // NEW: if locked (fullscreen/PiP), never autoplay others
+    if (lockedVideo) {
+      pauseAllExcept(lockedVideo);
+      if (lockedVideo.paused) {
+        const p = lockedVideo.play();
+        if (p?.catch) p.catch(() => {});
+      }
+      return;
+    }
+
     let best = null;
     let bestRatio = 0;
 
@@ -1119,37 +1144,26 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // If nothing is meaningfully visible, pause current
     if (!best || bestRatio < 0.35) {
       if (current && !current.paused) current.pause();
       current = null;
       return;
     }
 
-    // Hysteresis: don't switch unless the new one is clearly more visible
     if (current && current !== best) {
       const curRatio = ratioByVideo.get(current) || 0;
-      // Require either: best is quite visible OR it's 15% more visible than current
       const shouldSwitch = bestRatio > 0.65 || bestRatio > curRatio + 0.15;
       if (!shouldSwitch) return;
     }
 
-    if (current !== best) {
-      current = best;
-    }
+    if (current !== best) current = best;
 
-    // Only one plays
     pauseAllExcept(current);
     setMutedState(current);
 
-    // Race-proof play
     const mySeq = ++playSeq;
     const p = current.play();
-    if (p?.catch) {
-      p.catch(() => {});
-    }
-
-    // If another play request happened, ignore
+    if (p?.catch) p.catch(() => {});
     if (mySeq !== playSeq) return;
   }
 
@@ -1161,7 +1175,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Observer updates ratios, then schedules a single pick per frame
   const io = new IntersectionObserver(
     (entries) => {
       entries.forEach((e) => {
@@ -1170,30 +1183,55 @@ document.addEventListener("DOMContentLoaded", () => {
       schedulePick();
     },
     {
-      // A slight rootMargin makes it decide a bit earlier/later; tune to taste
       root: null,
       rootMargin: "0px 0px -10% 0px",
-      threshold: Array.from({ length: 21 }, (_, i) => i / 20), // 0.00..1.00
+      threshold: Array.from({ length: 21 }, (_, i) => i / 20),
     }
   );
 
   videos.forEach((v) => io.observe(v));
 
-  // Extra stability: also schedulePick on scroll/resize (in case IO lags)
   window.addEventListener("scroll", schedulePick, { passive: true });
   window.addEventListener("resize", schedulePick);
+
+  // ✅ NEW: if ANY video starts playing (user taps / fullscreen / etc), pause the rest
+  videos.forEach((v) => {
+    v.addEventListener("play", () => {
+      pauseAllExcept(v);
+      current = v; // keep current in sync
+    });
+  });
+
+  // ✅ NEW: fullscreen locking (standard browsers)
+  document.addEventListener("fullscreenchange", () => {
+    const fsEl = document.fullscreenElement;
+    if (fsEl && fsEl.tagName === "VIDEO" && videos.includes(fsEl)) {
+      lockToVideo(fsEl);
+    } else {
+      unlockVideo();
+    }
+  });
+
+  // ✅ NEW: iOS Safari fullscreen events
+  videos.forEach((v) => {
+    v.addEventListener("webkitbeginfullscreen", () => lockToVideo(v));
+    v.addEventListener("webkitendfullscreen", () => unlockVideo());
+  });
+
+  // ✅ Optional but nice: Picture-in-Picture locking (Chrome/Safari desktop)
+  videos.forEach((v) => {
+    v.addEventListener("enterpictureinpicture", () => lockToVideo(v));
+    v.addEventListener("leavepictureinpicture", () => unlockVideo());
+  });
 
   // Unlock audio on first user gesture
   const unlock = () => {
     audioUnlocked = true;
-
-    // If something is currently playing, unmute it within the gesture
     if (current) {
       setMutedState(current);
       const p = current.play();
       if (p?.catch) p.catch(() => {});
     }
-
     window.removeEventListener("pointerdown", unlock, true);
     window.removeEventListener("keydown", unlock, true);
   };
@@ -1201,6 +1239,5 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("pointerdown", unlock, true);
   window.addEventListener("keydown", unlock, true);
 
-  // Initial pick on load
   schedulePick();
 });
