@@ -288,9 +288,6 @@ searchBtn?.addEventListener("click", () => {
   const tags = window.getSearchTags ? window.getSearchTags() : [];
   if (tags.length) params.set("tags", tags.join(","));
 
-  // ⑥ フリーテキスト検索
-  if (mainSearch && mainSearch.value.trim()) params.set("q", mainSearch.value.trim());
-
   const qs = params.toString();
   window.location.href = qs ? `/home?${qs}` : "/home";
 });
@@ -1058,6 +1055,139 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
+
+
+
+
+
+// =============== USER SEARCH DROPDOWN (CLICK ONLY, ENTER DOES NOTHING) =====================
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.getElementById("mainSearch");
+  const dropdown = document.getElementById("searchDropdown");
+  if (!input || !dropdown) return;
+
+  let debounceTimer = null;
+  let aborter = null;
+
+  const hide = () => {
+    dropdown.hidden = true;
+    dropdown.innerHTML = "";
+  };
+
+  const show = () => {
+    dropdown.hidden = false;
+  };
+
+  const escapeHtml = (s) =>
+    String(s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+
+  const render = (users) => {
+    if (!users || users.length === 0) {
+      dropdown.innerHTML = `<div style="padding:10px 12px;color:#666;">ユーザーは見つかりませんでした</div>`;
+      show();
+      return;
+    }
+
+    dropdown.innerHTML = users
+      .map((u) => {
+        const url = `/user/${u.id}`; // only used on click
+        const avatar = u.avatar || "/static/img/profile_icon.png";
+        return `
+          <button type="button" class="search-item" data-url="${escapeHtml(url)}">
+            <img class="search-item-avatar" src="${escapeHtml(avatar)}" alt="">
+            <span class="search-item-name">${escapeHtml(u.username || "")}</span>
+          </button>
+        `;
+      })
+      .join("");
+
+    show();
+  };
+
+  const fetchUsers = async (q) => {
+    if (aborter) aborter.abort();
+    aborter = new AbortController();
+
+    const res = await fetch(`/api/user_search?q=${encodeURIComponent(q)}`, {
+      credentials: "same-origin",
+      signal: aborter.signal,
+    });
+
+    if (!res.ok) throw new Error("User search failed");
+    return res.json();
+  };
+
+  // typing updates dropdown only
+  input.addEventListener("input", () => {
+    const q = input.value.trim();
+    if (debounceTimer) clearTimeout(debounceTimer);
+
+    if (!q) {
+      hide();
+      return;
+    }
+
+    debounceTimer = setTimeout(async () => {
+      try {
+        const users = await fetchUsers(q);
+        render(users);
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        console.error(err);
+        hide();
+      }
+    }, 180);
+  });
+
+  // click only navigates
+  dropdown.addEventListener("click", (e) => {
+    const item = e.target.closest(".search-item");
+    if (!item) return;
+    const url = item.dataset.url;
+    if (url) window.location.href = url;
+  });
+
+  // HARD BLOCK: Enter should do NOTHING (keep popup), and must NOT trigger filters/feed.
+  // Capture phase + stopImmediatePropagation prevents your other mainSearch keydown listeners.
+  input.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        // do nothing else — keep dropdown open
+        return;
+      }
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        hide();
+      }
+    },
+    true
+  );
+
+  // keep popup open when clicking inside; close when clicking outside
+  document.addEventListener("click", (e) => {
+    const inside = dropdown.contains(e.target) || input.contains(e.target);
+    if (!inside) hide();
+  });
+
+  // when the X (search cancel) is pressed in <input type="search">
+  input.addEventListener("search", () => {
+    if (!input.value.trim()) hide();
+  });
+});
+
 
 
 
