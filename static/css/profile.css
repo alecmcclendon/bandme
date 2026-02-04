@@ -1210,7 +1210,7 @@ background: #eee;
 
 .count-btn:hover { opacity: .75; }
 
-.follow-popup { padding-top: 0; }
+.follow-popup { padding: 0; }
 
 .follow-list{
   list-style: none;
