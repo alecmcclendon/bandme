@@ -6,14 +6,19 @@ from werkzeug.utils import secure_filename
 
 # ✅ NEW: ensure correct MIME types for videos
 import mimetypes
+
 mimetypes.add_type("video/mp4", ".mp4")
 mimetypes.add_type("video/quicktime", ".mov")
+
+# ✅ R2 / S3 client (install: pip install boto3)
+import boto3
+from botocore.config import Config
 
 app = Flask(__name__)
 app.secret_key = "change-me-in-prod"
 DB_NAME = "users.db"
 
-# ---- Upload settings ----
+# ---- Local Upload settings (kept as fallback if R2 is not configured) ----
 UPLOAD_FOLDER = os.path.join("static", "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -23,6 +28,101 @@ POST_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "mp4", "mov"}
 
 # Avatars should be images only
 AVATAR_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+
+# =========================================================
+# R2 CONFIG (Python-only integration, no template changes)
+#
+# You store paths like: /r2/<key>
+# The /r2/<key> route redirects to a signed URL.
+#
+# Env vars required:
+#   R2_ENDPOINT_URL="https://<account_id>.r2.cloudflarestorage.com"
+#   R2_ACCESS_KEY_ID="..."
+#   R2_SECRET_ACCESS_KEY="..."
+#   R2_BUCKET="your-bucket"
+# Optional:
+#   R2_SIGNED_URL_EXPIRES="3600"
+# =========================================================
+R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL")
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
+R2_BUCKET = os.getenv("R2_BUCKET")
+R2_SIGNED_URL_EXPIRES = int(os.getenv("R2_SIGNED_URL_EXPIRES", "3600"))
+
+_s3 = None
+if all([R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET]):
+    _s3 = boto3.client(
+        "s3",
+        endpoint_url=R2_ENDPOINT_URL,
+        aws_access_key_id=R2_ACCESS_KEY_ID,
+        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+        region_name="auto",
+        config=Config(signature_version="s3v4"),
+    )
+
+
+def r2_enabled() -> bool:
+    return _s3 is not None
+
+
+def r2_make_key(prefix: str, filename: str) -> str:
+    # Example: posts/post_u1_...jpg
+    return f"{prefix.strip('/')}/{filename}"
+
+
+def r2_path_for_key(key: str) -> str:
+    # What you store in DB so templates can use it directly
+    return f"/r2/{key.lstrip('/')}"
+
+
+def r2_key_from_db_path(path: str | None) -> str | None:
+    if not path:
+        return None
+    if path.startswith("/r2/"):
+        return path[len("/r2/") :]
+    return None
+
+
+def r2_upload(file_storage, key: str) -> None:
+    if not r2_enabled():
+        raise RuntimeError("R2 not configured (missing env vars).")
+
+    content_type = mimetypes.guess_type(file_storage.filename)[0] or "application/octet-stream"
+    _s3.upload_fileobj(
+        file_storage.stream,
+        R2_BUCKET,
+        key,
+        ExtraArgs={"ContentType": content_type},
+    )
+
+
+def r2_delete_key(key: str) -> None:
+    if not r2_enabled() or not key:
+        return
+    try:
+        _s3.delete_object(Bucket=R2_BUCKET, Key=key)
+    except Exception:
+        # Avoid crashing requests on delete errors
+        pass
+
+
+def r2_signed_get_url(key: str, expires_seconds: int = R2_SIGNED_URL_EXPIRES) -> str:
+    if not r2_enabled():
+        raise RuntimeError("R2 not configured (missing env vars).")
+    return _s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": R2_BUCKET, "Key": key},
+        ExpiresIn=expires_seconds,
+    )
+
+
+# ✅ Signed URL redirect route (templates can use /r2/<key> as src/href)
+@app.route("/r2/<path:key>")
+def r2_proxy(key):
+    if not r2_enabled():
+        return "R2 not configured", 500
+    url = r2_signed_get_url(key)
+    return redirect(url)
 
 
 def allowed_file(filename: str) -> bool:
@@ -175,7 +275,7 @@ def init_db():
         )
     """)
 
-    # ✅ NEW: per-user conversation state (hide/clear for ME only)
+    # per-user conversation state (hide/clear for ME only)
     c.execute("""
         CREATE TABLE IF NOT EXISTS conversation_states (
             conversation_id INTEGER NOT NULL,
@@ -210,7 +310,7 @@ def _sorted_pair(a: int, b: int):
     return (a, b) if a < b else (b, a)
 
 
-# ✅ NEW: ensure per-user state row exists
+# ensure per-user state row exists
 def ensure_conv_state(conn, conversation_id: int, user_id: int):
     c = conn.cursor()
     c.execute("""
@@ -283,12 +383,12 @@ def home():
     if "username" not in session:
         return redirect(url_for("login"))
 
-    filter_role          = request.args.get("role")
-    filter_genre         = request.args.get("genre_filter")
-    filter_instrument    = request.args.get("instrument_filter")
+    filter_role = request.args.get("role")
+    filter_genre = request.args.get("genre_filter")
+    filter_instrument = request.args.get("instrument_filter")
     filter_my_instrument = request.args.get("my_instrument_filter")
-    filter_tags_str      = request.args.get("tags", "").strip()
-    filter_q             = request.args.get("q", "").strip()
+    filter_tags_str = request.args.get("tags", "").strip()
+    filter_q = request.args.get("q", "").strip()
 
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
@@ -375,16 +475,13 @@ def profile():
 
     avatar = user["avatar_path"] or default_avatar_for(user["role"])
 
-    # follower count (people who follow me)
     c.execute("SELECT COUNT(*) AS cnt FROM follows WHERE following_id = ?", (me,))
     follower_count = c.fetchone()["cnt"]
 
-    # following count (people I follow)
     c.execute("SELECT COUNT(*) AS cnt FROM follows WHERE follower_id = ?", (me,))
     following_count = c.fetchone()["cnt"]
 
     showcase_items = get_showcase_items(conn, me)
-
     conn.close()
 
     return render_template(
@@ -430,6 +527,7 @@ def update_profile():
             return "そのユーザー名はすでに使われています", 400
 
     avatar_path = me_row["avatar_path"]
+    old_avatar_key = r2_key_from_db_path(avatar_path)
 
     file = request.files.get("icon")
     if file and file.filename:
@@ -438,9 +536,20 @@ def update_profile():
             return "Invalid avatar file type", 400
 
         unique = _unique_upload_name("avatar", me, file.filename)
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
-        file.save(save_path)
-        avatar_path = "/" + save_path.replace(os.sep, "/")
+
+        if r2_enabled():
+            new_key = r2_make_key("avatars", unique)
+            r2_upload(file, new_key)
+            avatar_path = r2_path_for_key(new_key)
+
+            # optional cleanup: delete prior avatar object (only if it was stored in R2)
+            if old_avatar_key and old_avatar_key.startswith("avatars/"):
+                r2_delete_key(old_avatar_key)
+        else:
+            # fallback to local storage
+            save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
+            file.save(save_path)
+            avatar_path = "/" + save_path.replace(os.sep, "/")
 
     c.execute("""
         UPDATE users
@@ -461,22 +570,27 @@ def update_showcase():
         return redirect(url_for("login"))
 
     me = session["user_id"]
-
-    # deletes (from hidden inputs)
     delete_ids = request.form.getlist("delete_ids")
-
     files = request.files.getlist("files[]")
 
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    # delete only my items
+    # delete only my items (and delete R2 object if applicable)
     for raw in delete_ids:
         try:
             sid = int(raw)
         except ValueError:
             continue
+
+        c.execute("SELECT media_path FROM showcase_items WHERE id = ? AND user_id = ?", (sid, me))
+        row = c.fetchone()
+        if row:
+            key = r2_key_from_db_path(row["media_path"])
+            if key:
+                r2_delete_key(key)
+
         c.execute("DELETE FROM showcase_items WHERE id = ? AND user_id = ?", (sid, me))
 
     # add uploads
@@ -487,9 +601,15 @@ def update_showcase():
             continue
 
         unique = _unique_upload_name("showcase", me, f.filename)
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
-        f.save(save_path)
-        media_path = "/" + save_path.replace(os.sep, "/")
+
+        if r2_enabled():
+            key = r2_make_key("showcase", unique)
+            r2_upload(f, key)
+            media_path = r2_path_for_key(key)
+        else:
+            save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
+            f.save(save_path)
+            media_path = "/" + save_path.replace(os.sep, "/")
 
         c.execute(
             "INSERT INTO showcase_items (user_id, media_path) VALUES (?, ?)",
@@ -544,13 +664,14 @@ def create_post():
             return "Forbidden", 403
 
         media_path = row["media_path"]
+        old_key = r2_key_from_db_path(media_path)
 
-        # ✅ if user clicked the X, remove existing media
+        # if user clicked the X, remove existing media
         remove_media = (request.form.get("remove_media") or "0") == "1"
         if remove_media:
-            # Optional: delete the actual file from disk (only if it's in /static/uploads/)
-            # ✅ NOTE: if you think deletes are causing missing videos, you can comment this block out.
-            if media_path and media_path.startswith("/static/uploads/"):
+            if old_key:
+                r2_delete_key(old_key)
+            elif media_path and media_path.startswith("/static/uploads/"):
                 try:
                     os.remove(media_path.lstrip("/"))
                 except OSError:
@@ -560,10 +681,20 @@ def create_post():
         # If user uploads a new file, it overrides removal
         file = request.files.get("media")
         if file and file.filename and allowed_file(file.filename):
-            unique = _unique_upload_name("post", me, file.filename)  # ✅ avoids overwriting
-            save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
-            file.save(save_path)
-            media_path = "/" + save_path.replace(os.sep, "/")
+            unique = _unique_upload_name("post", me, file.filename)
+
+            if r2_enabled():
+                new_key = r2_make_key("posts", unique)
+                r2_upload(file, new_key)
+                media_path = r2_path_for_key(new_key)
+
+                # optional cleanup: delete prior object if replacing
+                if old_key:
+                    r2_delete_key(old_key)
+            else:
+                save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
+                file.save(save_path)
+                media_path = "/" + save_path.replace(os.sep, "/")
 
         c.execute("""
             UPDATE posts
@@ -579,11 +710,16 @@ def create_post():
     media_path = None
     file = request.files.get("media")
     if file and file.filename and allowed_file(file.filename):
-        # ✅ UPDATED: create mode now also uses unique filenames (no overwrites)
         unique = _unique_upload_name("post", me, file.filename)
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
-        file.save(save_path)
-        media_path = "/" + save_path.replace(os.sep, "/")
+
+        if r2_enabled():
+            key = r2_make_key("posts", unique)
+            r2_upload(file, key)
+            media_path = r2_path_for_key(key)
+        else:
+            save_path = os.path.join(app.config["UPLOAD_FOLDER"], unique)
+            file.save(save_path)
+            media_path = "/" + save_path.replace(os.sep, "/")
 
     c.execute("""
         INSERT INTO posts (user_id, caption, genre, my_instrument, target_instrument, tags, media_path)
@@ -606,7 +742,7 @@ def delete_post(post_id):
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    c.execute("SELECT user_id FROM posts WHERE id = ?", (post_id,))
+    c.execute("SELECT user_id, media_path FROM posts WHERE id = ?", (post_id,))
     row = c.fetchone()
     if not row:
         conn.close()
@@ -614,6 +750,16 @@ def delete_post(post_id):
     if row["user_id"] != me:
         conn.close()
         return "Forbidden", 403
+
+    # optional: delete underlying media
+    key = r2_key_from_db_path(row["media_path"])
+    if key:
+        r2_delete_key(key)
+    elif row["media_path"] and row["media_path"].startswith("/static/uploads/"):
+        try:
+            os.remove(row["media_path"].lstrip("/"))
+        except OSError:
+            pass
 
     c.execute("DELETE FROM posts WHERE id = ?", (post_id,))
     conn.commit()
@@ -631,7 +777,6 @@ def api_follow_toggle():
     me = session["user_id"]
     data = request.get_json(force=True) or {}
 
-    # accept both keys
     target = data.get("other_user_id", data.get("user_id"))
 
     try:
@@ -755,7 +900,6 @@ def api_conversations():
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    # ✅ UPDATED: only hide/clear for ME, never delete the other user's copy
     c.execute("""
         SELECT
           c.id AS conversation_id,
@@ -857,19 +1001,16 @@ def api_delete_message(msg_id):
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    # Find message
     c.execute("SELECT id, conversation_id, sender_id FROM messages WHERE id = ?", (msg_id,))
     m = c.fetchone()
     if not m:
         conn.close()
         return jsonify({"error": "message not found"}), 404
 
-    # Only the sender can delete
     if m["sender_id"] != me:
         conn.close()
         return jsonify({"error": "forbidden"}), 403
 
-    # Extra safety: ensure I’m in that conversation
     c.execute("SELECT user1_id, user2_id FROM conversations WHERE id = ?", (m["conversation_id"],))
     conv = c.fetchone()
     if not conv or me not in (conv["user1_id"], conv["user2_id"]):
@@ -892,7 +1033,6 @@ def api_delete_conversations():
     data = request.get_json(force=True) or {}
     ids = data.get("conversation_ids") or []
 
-    # sanitize ids
     conv_ids = []
     for x in ids:
         try:
@@ -907,7 +1047,6 @@ def api_delete_conversations():
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    # only allow deleting conversations that include me
     qmarks = ",".join(["?"] * len(conv_ids))
     c.execute(
         f"""
@@ -926,7 +1065,6 @@ def api_delete_conversations():
 
     qmarks2 = ",".join(["?"] * len(allowed))
 
-    # ✅ UPDATED: "delete" only hides/clears for ME (does NOT delete shared conversation/messages)
     now = datetime.utcnow().isoformat(" ")
     for conv_id in allowed:
         ensure_conv_state(conn, conv_id, me)
@@ -943,7 +1081,6 @@ def api_delete_conversations():
         params1,
     )
 
-    # optional: remove read-state for me so unread logic behaves cleanly if it comes back
     params2 = [me] + allowed
     c.execute(
         f"""
@@ -1000,7 +1137,6 @@ def api_start_conversation():
         conv_id = c.lastrowid
         conn.commit()
 
-    # ✅ NEW: ensure state rows + unhide for me
     ensure_conv_state(conn, conv_id, me)
     ensure_conv_state(conn, conv_id, other_user_id)
     c.execute("""
@@ -1009,7 +1145,6 @@ def api_start_conversation():
         WHERE conversation_id = ? AND user_id = ?
     """, (conv_id, me))
 
-    # ✅ NEW: respect my cleared_at (so "delete chat" only clears for me)
     c.execute("""
         SELECT cleared_at
         FROM conversation_states
@@ -1090,10 +1225,8 @@ def api_conversation_messages(conv_id):
     other_id = conv["user2_id"] if conv["user1_id"] == me else conv["user1_id"]
     other_username = conv["user2_name"] if conv["user1_id"] == me else conv["user1_name"]
 
-    # ✅ NEW: ensure my state exists
     ensure_conv_state(conn, conv_id, me)
 
-    # ✅ NEW: respect my cleared_at (so "delete chat" only clears for me)
     c.execute("""
         SELECT cleared_at
         FROM conversation_states
@@ -1183,7 +1316,6 @@ def api_send_message():
     c.execute("SELECT created_at FROM messages WHERE id = ?", (msg_id,))
     row = c.fetchone()
 
-    # ✅ NEW: if the other user hid it, unhide it for them when a new message arrives
     other_id = conv["user2_id"] if conv["user1_id"] == me else conv["user1_id"]
     ensure_conv_state(conn, conv_id, other_id)
     c.execute("""
@@ -1264,14 +1396,12 @@ def user_profile(user_id):
 
     avatar = user["avatar_path"] or default_avatar_for(user["role"])
 
-    # counts
     c.execute("SELECT COUNT(*) AS cnt FROM follows WHERE following_id = ?", (user_id,))
     follower_count = c.fetchone()["cnt"]
 
     c.execute("SELECT COUNT(*) AS cnt FROM follows WHERE follower_id = ?", (user_id,))
     following_count = c.fetchone()["cnt"]
 
-    # am I following them?
     c.execute("""
         SELECT 1 FROM follows
         WHERE follower_id = ? AND following_id = ?
@@ -1279,7 +1409,6 @@ def user_profile(user_id):
     is_following = c.fetchone() is not None
 
     showcase_items = get_showcase_items(conn, user_id)
-
     conn.close()
 
     return render_template(
@@ -1309,7 +1438,6 @@ def api_account_delete():
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    # verify password (PLAINTEXT - matches your current DB)
     c.execute("SELECT password FROM users WHERE id = ?", (me,))
     row = c.fetchone()
     if not row:
@@ -1321,7 +1449,6 @@ def api_account_delete():
         conn.close()
         return jsonify({"error": "パスワードが正しくありません"}), 403
 
-    # ---- delete related data first (to avoid orphans) ----
     c.execute("DELETE FROM messages WHERE sender_id = ?", (me,))
     c.execute("""
         DELETE FROM messages
@@ -1334,10 +1461,30 @@ def api_account_delete():
     c.execute("DELETE FROM conversations WHERE user1_id = ? OR user2_id = ?", (me, me))
 
     c.execute("DELETE FROM follows WHERE follower_id = ? OR following_id = ?", (me, me))
+
+    # Optional: delete R2 objects for showcase/posts for this user before deleting rows
+    c.execute("SELECT media_path FROM showcase_items WHERE user_id = ?", (me,))
+    for r in c.fetchall():
+        key = r2_key_from_db_path(r["media_path"])
+        if key:
+            r2_delete_key(key)
+
+    c.execute("SELECT media_path FROM posts WHERE user_id = ?", (me,))
+    for r in c.fetchall():
+        key = r2_key_from_db_path(r["media_path"])
+        if key:
+            r2_delete_key(key)
+
+    # Optional: delete avatar object
+    c.execute("SELECT avatar_path FROM users WHERE id = ?", (me,))
+    av = c.fetchone()
+    if av and av["avatar_path"]:
+        key = r2_key_from_db_path(av["avatar_path"])
+        if key:
+            r2_delete_key(key)
+
     c.execute("DELETE FROM showcase_items WHERE user_id = ?", (me,))
     c.execute("DELETE FROM posts WHERE user_id = ?", (me,))
-
-    # finally delete user
     c.execute("DELETE FROM users WHERE id = ?", (me,))
 
     conn.commit()
