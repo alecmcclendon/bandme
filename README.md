@@ -7,7 +7,7 @@
 ---
 
 🔗 **デモサイトはこちら**  
-- https://YOUR-DEMO-URL.example
+- https://bandme.onrender.com
 
 ---
 
